@@ -1,0 +1,46 @@
+repos:
+  - repo: local
+    hooks:
+      - id: isort
+        name: isort (uv)
+        language: system
+        entry: rtk uv run isort
+        files: ^(train_gpt\.py|train_gpt_mlx\.py|data/.*\.py)$
+        pass_filenames: true
+        args: [--settings-path, pyproject.toml, --diff]
+
+      - id: black
+        name: black (uv)
+        language: system
+        entry: env BLACK_NUM_WORKERS=1 rtk uv run black
+        files: ^(train_gpt\.py|train_gpt_mlx\.py|data/.*\.py)$
+        pass_filenames: true
+        args: [--config, pyproject.toml, --diff, --workers, "1"]
+
+      - id: flake8
+        name: flake8 (uv)
+        language: system
+        entry: rtk uv run flake8
+        files: ^(train_gpt\.py|train_gpt_mlx\.py|data/.*\.py)$
+        pass_filenames: true
+        args: [--toml-config, pyproject.toml]
+
+      - id: mypy
+        name: mypy (uv)
+        language: system
+        entry: rtk uv run mypy
+        files: ^(train_gpt\.py|train_gpt_mlx\.py|data/.*\.py)$
+        pass_filenames: true
+        args: [--config-file, pyproject.toml]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-json
+      - id: pretty-format-json
+        args: [--no-ensure-ascii]
+      - id: check-yaml
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: debug-statements
+        files: ^.*\.py$
