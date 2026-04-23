@@ -24,6 +24,8 @@ import sentencepiece as spm
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+
+from data.training_manifest import validate_dataset_tokenizer_pair
 from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -802,6 +804,10 @@ def main() -> None:
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
+    dataset_name, actual_train_files, expected_train_files = validate_dataset_tokenizer_pair(
+        args.data_path, args.tokenizer_path
+    )
+
     if not args.tokenizer_path.endswith(".model"):
         raise ValueError(f"Script only setup for SentencePiece .model file: {args.tokenizer_path}")
     sp = spm.SentencePieceProcessor(model_file=args.tokenizer_path)
@@ -810,13 +816,14 @@ def main() -> None:
             f"VOCAB_SIZE={args.vocab_size} does not match tokenizer vocab_size={int(sp.vocab_size())}"
         )
     dataset_dir = Path(args.data_path).resolve()
-    actual_train_files = len(list(dataset_dir.glob("fineweb_train_*.bin")))
     val_tokens = load_validation_tokens(args.val_files, args.train_seq_len)
     base_bytes_lut, has_leading_space_lut, is_boundary_token_lut = build_sentencepiece_luts(
         sp, args.vocab_size, device
     )
     log0(f"val_bpb:enabled tokenizer_kind=sentencepiece tokenizer_path={args.tokenizer_path}")
-    log0(f"train_loader:dataset:{dataset_dir.name} train_shards:{actual_train_files}")
+    log0(f"train_loader:dataset:{dataset_name} train_shards:{actual_train_files}")
+    if expected_train_files is not None:
+        log0(f"train_loader:manifest_expected_shards:{expected_train_files}")
     log0(f"val_loader:shards pattern={args.val_files} tokens:{val_tokens.numel() - 1}")
 
     # -----------------------------
