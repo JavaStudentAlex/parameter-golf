@@ -30,3 +30,19 @@ The data workflow centers on cached FineWeb exports, tokenizer artifacts, manife
 - CPU-heavy exports expose tuning knobs for batch size and tokenizer worker counts, including batched encoding, tokenizer threads, tiktoken threads, and GPT-2 decode batching.
 
 Use the data workflow guide for the exact commands and environment knobs when you need to download, rebuild, or tune exports.
+
+## Tech Stack Verification
+
+Verified with the repo's required `rtk` proxy and uv-managed Python environment:
+
+| Check | Result |
+| --- | --- |
+| `rtk --version` | `rtk 0.37.2` |
+| `rtk uv --version` | `uv 0.11.6 (x86_64-unknown-linux-gnu)` |
+| `rtk uv run python --version` | `Python 3.13.12` |
+
+Metric guardrails confirmed via grep:
+
+- `train_gpt.py` contains `val_bpb`, `final_int8_zlib_roundtrip`, and `MAX_WALLCLOCK_SECONDS`.
+- `train_gpt_mlx.py` contains `val_bpb`, `final_int8_zlib_roundtrip`, and `MAX_WALLCLOCK_SECONDS`.
+- `README.md` references `val_bpb`, `final_int8_zlib_roundtrip`, and `MAX_WALLCLOCK_SECONDS`.
