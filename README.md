@@ -220,6 +220,30 @@ New SOTA records must fulfill the following criteria:
 
 1. They must beat the existing SOTA by at least 0.005 nats. As in modded-nanogpt, because of inter-run variance all submissions must provide enough run logs to show at `p < 0.01` that they achieved the required 0.005-nat improvement. For submissions that improve speed through systems optimization without changing the ML, this requirement is waived.
 
+### Verifying Stability and Significance
+
+To ensure results are statistically significant, use the stability verifier. This tool parses multiple logs, calculates mean and confidence intervals, and performs a one-sided t-test against the SOTA threshold.
+
+**Example 1: Stability Summary**
+Check the variance and confidence intervals of multiple local runs:
+```bash
+rtk uv run python scripts/verify_baseline_stability.py --logs logs/run*.txt
+```
+
+**Example 2: Challenge-Threshold Significance**
+Verify if a new approach (e.g., three runs) beats the SOTA with the required 0.005-nat margin at `p < 0.01`. Using the tracked `TrainingOptSeq4096` record as an example comparison:
+```bash
+rtk uv run python scripts/verify_baseline_stability.py \
+  --logs records/track_10min_16mb/2026-03-19_TrainingOptSeq4096/train.log \
+  records/track_10min_16mb/2026-03-19_TrainingOptSeq4096/train_seed1338.log \
+  records/track_10min_16mb/2026-03-19_TrainingOptSeq4096/train_seed1339.log \
+  --sota-bpb 1.21613611 \
+  --required-improvement 0.005 \
+  --max-p-value 0.01
+```
+
+The tool will exit with code 0 only if the p-value is below the 0.01 threshold, providing machine-checkable proof of significance.
+
 2. If changes are made to the tokenizer or dataset, prove with certainty that the val_bpb is correctly calculated. Submissions that edit the tokenizer will be examined much more carefully, since bugs may unjustly improve your score.
 
 3. Reproducibly run in under 10 minutes on 8xH100s.
