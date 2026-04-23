@@ -1,69 +1,132 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
-import re
 import sys
 from pathlib import Path
 
+if __package__ in (None, ""):
+    from log_metrics import (
+        LogMetricParseError,
+        parse_log_metrics,
+        require_exact_roundtrip_metric,
+        require_submission_size_proof,
+        require_wallclock_cap_proof,
+    )
+else:
+    from scripts.log_metrics import (
+        LogMetricParseError,
+        parse_log_metrics,
+        require_exact_roundtrip_metric,
+        require_submission_size_proof,
+        require_wallclock_cap_proof,
+    )
 
-def verify_log(log_path: Path, require_wallclock_cap: bool = False) -> bool:
-    if not log_path.exists():
-        print(f"Error: Log file not found at {log_path}")
+DEFAULT_MAX_TOTAL_BYTES = 16_000_000
+
+
+def verify_log(
+    log_path: Path,
+    require_wallclock_cap: bool = False,
+    *,
+    require_roundtrip_exact: bool = True,
+    require_total_size: bool = True,
+    max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES,
+) -> bool:
+    try:
+        parsed_log = parse_log_metrics(log_path)
+
+        if require_roundtrip_exact:
+            metric = require_exact_roundtrip_metric(parsed_log)
+            print(
+                "✅ Found exact roundtrip metric: "
+                f"{metric.label} val_loss={metric.val_loss:.8f}, val_bpb={metric.val_bpb:.8f}"
+            )
+
+        if require_total_size:
+            submission_size = require_submission_size_proof(parsed_log)
+            if submission_size.total_bytes > max_total_bytes:
+                print(
+                    f"❌ {submission_size.label}: {submission_size.total_bytes} bytes "
+                    f"exceeds limit of {max_total_bytes} bytes."
+                )
+                return False
+            print(
+                f"✅ {submission_size.label}: {submission_size.total_bytes} bytes "
+                f"(within {max_total_bytes} byte limit)"
+            )
+
+        if require_wallclock_cap:
+            wallclock_cap = require_wallclock_cap_proof(parsed_log)
+            print(
+                "✅ Found wallclock-cap proof: "
+                f"train_time={wallclock_cap.train_time_ms}ms "
+                f"step={wallclock_cap.step}/{wallclock_cap.total_steps}"
+            )
+    except LogMetricParseError as error:
+        print(f"Error: {error}")
         return False
-
-    content = log_path.read_text()
-
-    # 1. Verify final_int8_zlib_roundtrip_exact
-    roundtrip_match = re.search(r"final_int8_zlib_roundtrip_exact\s+val_loss:([\d\.]+)\s+val_bpb:([\d\.]+)", content)
-    if not roundtrip_match:
-        print("Error: Missing 'final_int8_zlib_roundtrip_exact' line.")
-        return False
-    val_loss = float(roundtrip_match.group(1))
-    val_bpb = float(roundtrip_match.group(2))
-    print(f"✅ Found roundtrip metric: val_loss={val_loss}, val_bpb={val_bpb}")
-
-    # 2. Verify Total submission size int8+zlib
-    # Match "Total submission size int8+zlib: 15863489 bytes" or "Total submission size: 67272625 bytes"
-    # We prefer the int8+zlib one if available
-    size_matches = re.findall(r"Total submission size(?: int8\+zlib)?:\s+(\d+)\s+bytes", content)
-    if not size_matches:
-        print("Error: Missing 'Total submission size' line.")
-        return False
-    
-    # Check if any of the sizes are within limit (prioritizing compressed if multiple)
-    sizes = [int(s) for s in size_matches]
-    total_size = min(sizes) # For verification, the smallest claimed size is the "total submission size" in the compressed path
-    
-    MAX_SIZE = 16_000_000
-    if total_size > MAX_SIZE:
-        print(f"❌ Total submission size {total_size} exceeds limit of {MAX_SIZE} bytes.")
-        return False
-    print(f"✅ Total submission size: {total_size} bytes (within 16MB limit)")
-
-    # 3. Optional: Verify wallclock-cap proof
-    if require_wallclock_cap:
-        wallclock_match = re.search(r"stopping_early: wallclock_cap", content)
-        if not wallclock_match:
-            print("Error: Missing 'stopping_early: wallclock_cap' line (required by --require-wallclock-cap).")
-            return False
-        print("✅ Found wallclock-cap proof.")
 
     return True
 
 
-def main():
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify training log for challenge compliance.")
-    parser.add_argument("log_file", type=Path, help="Path to the training log file.")
-    parser.add_argument("--require-wallclock-cap", action="store_true", help="Require proof of wallclock cap early stop.")
+    parser.add_argument("log_file", nargs="?", type=Path, help="Path to the training log file.")
+    parser.add_argument("--log", dest="log_path", type=Path, help="Path to the training log file.")
+    parser.add_argument(
+        "--require-roundtrip-exact",
+        dest="require_roundtrip_exact",
+        action="store_true",
+        default=True,
+        help="Require the exact roundtrip metric line.",
+    )
+    parser.add_argument(
+        "--require-total-size",
+        dest="require_total_size",
+        action="store_true",
+        default=True,
+        help="Require a total submission size line.",
+    )
+    parser.add_argument(
+        "--require-wallclock-cap",
+        action="store_true",
+        help="Require proof of wallclock cap early stop.",
+    )
+    parser.add_argument(
+        "--max-total-bytes",
+        type=int,
+        default=DEFAULT_MAX_TOTAL_BYTES,
+        help="Maximum allowed total submission size in bytes.",
+    )
+    return parser
 
-    args = parser.parse_args()
 
-    if verify_log(args.log_file, args.require_wallclock_cap):
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    log_path = args.log_path or args.log_file
+    if log_path is None:
+        parser.error("a training log path must be provided either positionally or via --log")
+    if args.log_path is not None and args.log_file is not None and args.log_path != args.log_file:
+        parser.error(
+            "provide the training log path either positionally or via --log, not both with different values"
+        )
+
+    if verify_log(
+        log_path,
+        require_wallclock_cap=args.require_wallclock_cap,
+        require_roundtrip_exact=args.require_roundtrip_exact,
+        require_total_size=args.require_total_size,
+        max_total_bytes=args.max_total_bytes,
+    ):
         print("🚀 Log verification PASSED.")
-        sys.exit(0)
-    else:
-        print("❌ Log verification FAILED.")
-        sys.exit(1)
+        return 0
+
+    print("❌ Log verification FAILED.")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

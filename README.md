@@ -112,14 +112,16 @@ By default this downloads the full validation split plus 80 training shards (8B 
 Then run a small MLX training job:
 
 ```bash
-RUN_ID=mlx_smoke \
+RUN_ID=mlx_smoke_s02 \
 ITERATIONS=200 \
 TRAIN_BATCH_TOKENS=8192 \
 VAL_LOSS_EVERY=0 \
 VAL_BATCH_SIZE=8192 \
-rtk uv run python train_gpt_mlx.py > train.log 2>&1
-rtk uv run python scripts/verify_baseline_log.py train.log
+rtk uv run python train_gpt_mlx.py
+rtk uv run python scripts/verify_baseline_log.py --log logs/mlx_smoke_s02.txt --require-roundtrip-exact --require-total-size --max-total-bytes 16000000
 ```
+
+The trainer writes its tracked log to `logs/$RUN_ID.txt`, so the verifier always points at that path.
 
 Validation always runs on the full `fineweb_val_*` split, which is the fixed first-50k-document set. The smoke command above skips periodic validation and just prints the final `val_loss` and `val_bpb` once at the end.
 
@@ -161,8 +163,8 @@ RUN_ID=baseline_sp1024 \
 DATA_PATH=./data/datasets/fineweb10B_sp1024/ \
 TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
 VOCAB_SIZE=1024 \
-rtk uv run torchrun --standalone --nproc_per_node=1 train_gpt.py > train.log 2>&1
-rtk uv run python scripts/verify_baseline_log.py train.log
+rtk uv run torchrun --standalone --nproc_per_node=1 train_gpt.py
+rtk uv run python scripts/verify_baseline_log.py --log logs/baseline_sp1024.txt --require-roundtrip-exact --require-total-size --max-total-bytes 16000000
 ```
 
 By default, `train_gpt.py` keeps its ~10 minute wallclock cap. If you want a longer run, override it explicitly, for example `MAX_WALLCLOCK_SECONDS=0`.
@@ -171,8 +173,8 @@ For 8xH100 baseline runs (leaderboard compliant), use:
 
 ```bash
 RUN_ID=baseline_8gpu \
-rtk uv run torchrun --standalone --nproc_per_node=8 train_gpt.py > train.log 2>&1
-rtk uv run python scripts/verify_baseline_log.py train.log --require-wallclock-cap
+rtk uv run torchrun --standalone --nproc_per_node=8 train_gpt.py
+rtk uv run python scripts/verify_baseline_log.py --log logs/baseline_8gpu.txt --require-roundtrip-exact --require-total-size --require-wallclock-cap --max-total-bytes 16000000
 ```
 
 By default, this command prints `train_loss` step logs during training and prints `val_loss`, `val_bpb`, and compressed model size in the final `final_int8_zlib_roundtrip` lines at the end. If you want periodic validation logs during the run, set `VAL_LOSS_EVERY`, for example `VAL_LOSS_EVERY=200`. For the baseline config, the final `val_bpb` should land around ~1.2 with a compressed model size under 16MB.

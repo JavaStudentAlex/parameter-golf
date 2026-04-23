@@ -16,6 +16,7 @@ dependencies = [
     "tqdm>=4.67.3",
     "typing-extensions==4.15.0",
     "mlx>=0.22.1; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "scipy>=1.17.1",
 ]
 
 [project.optional-dependencies]
