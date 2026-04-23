@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_METRICS = ("val_bpb", "final_int8_zlib_roundtrip", "MAX_WALLCLOCK_SECONDS")
 DOCS_WITH_METRICS = ("README.md", "train_gpt.py", "train_gpt_mlx.py")
+REPO_COMMANDS = ("rtk uv sync", "rtk uv run python", "rtk uv run torchrun", "scripts/verify_baseline_log.py")
 
 
 def test_metric_guardrails_remain_documented() -> None:
@@ -10,6 +11,12 @@ def test_metric_guardrails_remain_documented() -> None:
         text = (ROOT / relative_path).read_text()
         for metric in REQUIRED_METRICS:
             assert metric in text, f"{metric} missing from {relative_path}"
+
+
+def test_repo_compliant_commands_documented() -> None:
+    text = (ROOT / "README.md").read_text()
+    for cmd in REPO_COMMANDS:
+        assert cmd in text, f"README.md missing repo-compliant command pattern: {cmd}"
 
 
 def test_project_records_tech_stack_verification() -> None:
